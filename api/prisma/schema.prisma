@@ -1,0 +1,34 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Observation {
+  id          String   @id @default(cuid())
+  title       String
+  description String?
+  bodyParts   Json
+  confidence  Float
+  timestamp   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  
+  insights    Insight[]
+  
+  @@map("observations")
+}
+
+model Insight {
+  id          String   @id @default(cuid())
+  observationId String
+  observation   Observation @relation(fields: [observationId], references: [id], onDelete: Cascade)
+  type        String
+  content     String
+  confidence  Float
+  timestamp   DateTime @default(now())
+  
+  @@map("insights")
+}
