@@ -1,0 +1,61 @@
+# Multi-stage Dockerfile for BodyLanguageDecoder - Fixed Build Issues
+FROM node:18-alpine AS base
+
+# Install dependencies only when needed
+FROM base AS deps
+RUN apk add --no-cache libc6-compat
+WORKDIR /app
+
+# Install dependencies based on the preferred package manager
+COPY api/package*.json ./api/
+COPY web/package*.json ./web/
+RUN cd api && npm ci --omit=dev
+RUN cd web && npm ci --omit=dev
+
+# Build stage - include dev dependencies for building
+FROM base AS builder
+WORKDIR /app
+
+# Copy package files
+COPY api/package*.json ./api/
+COPY web/package*.json ./web/
+
+# Install all dependencies (including dev for building)
+RUN cd api && npm ci
+RUN cd web && npm ci
+
+# Copy source code
+COPY api ./api
+COPY web ./web
+
+# Build the applications
+RUN cd api && npm run build
+RUN cd web && npm run build
+
+# Production image
+FROM base AS runner
+WORKDIR /app
+
+ENV NODE_ENV=production
+
+# Create non-root user
+RUN addgroup --system --gid 1001 nodejs
+RUN adduser --system --uid 1001 nextjs
+
+# Copy built applications
+COPY --from=builder --chown=nextjs:nodejs /app/api/dist ./api/dist
+COPY --from=builder --chown=nextjs:nodejs /app/web/dist ./web/dist
+COPY --from=builder --chown=nextjs:nodejs /app/api/package*.json ./api/
+COPY --from=builder --chown=nextjs:nodejs /app/web/package*.json ./web/
+
+# Install production dependencies only
+RUN cd api && npm ci --omit=dev
+RUN cd web && npm ci --omit=dev
+
+USER nextjs
+
+EXPOSE 5000
+
+ENV PORT=5000
+
+CMD ["node", "api/dist/index.js"]
